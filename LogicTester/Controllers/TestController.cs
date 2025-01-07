@@ -40,11 +40,146 @@ namespace LogicTester.Controllers
 
         public class BulkTestRequestModel
         {
-            public List<string> Symboltoken { get; set; }
             public DateTime StartDate { get; set; }
             public DateTime EndDate { get; set; }
         }
 
+        //POST https://localhost:7067/api/Test/BulkTestMasterAPI
+        [HttpPost("BulkTestMasterAPI")]
+        public async Task<IActionResult> BulkTestMasterAPI([FromBody] BulkTestRequestModel request)
+        {
+            string authtoken = await GetAuthorizationTokenAsync();
+
+            List<List<List<Candel>>> MainCorrectPredictionList = new List<List<List<Candel>>>();
+            List<List<List<Candel>>> MainWrongPredictionList = new List<List<List<Candel>>>();
+
+
+            decimal MainProfit = 0;
+            decimal MainLoss = 0;
+
+
+            foreach (var stock in _stocks)
+            {
+                List<Candel> MasterList = new List<Candel>();
+
+                List<Candel> DrafonFlyDojiCandels = new List<Candel>();
+
+                List<List<Candel>> AnalyzerList = new List<List<Candel>>();
+
+                List<List<Candel>> CorrectPredictionList = new List<List<Candel>>();
+                List<List<Candel>> WrongPredictionList = new List<List<Candel>>();
+
+                List<Candel> CandelData = new List<Candel>();
+
+                // Variables for profit and loss tracking
+                decimal TotalProfit = 0;
+                decimal NetLoss = 0;
+
+                var token = authtoken;
+
+                var requestBody = new
+                {
+                    SymbolToken = stock.symboltoken,
+                    AuthorizationToken = token,
+                    StartDate = request.StartDate.ToString("o"), // ISO string format
+                    EndDate = request.EndDate.ToString("o") // ISO string format
+                };
+
+
+                var client = new HttpClient();
+                var jsonRequestBody = JsonConvert.SerializeObject(requestBody);
+                var content = new StringContent(jsonRequestBody, Encoding.UTF8, "application/json");
+
+                try
+                {
+                    var response = await client.PostAsync("https://localhost:7067/api/AngelCandel/getCandleData", content);
+
+                    if (response.IsSuccessStatusCode)
+                    {
+
+                        var responseData = await response.Content.ReadAsStringAsync();
+                        CandelData = JsonConvert.DeserializeObject<List<Candel>>(responseData);
+
+                        List<Candel> dragonFlyDojiCandles = IdentifyDragonflyDojiCandles(CandelData);
+
+                        MasterList = CandelData;
+                        DrafonFlyDojiCandels = dragonFlyDojiCandles;
+
+                        // Iterating through each Dragonfly Doji Candle
+                        foreach (Candel dojiCandle in dragonFlyDojiCandles)
+                        {
+                            // Get the index of the Dragonfly Doji candle in the full list
+                            int dojiIndex = CandelData.IndexOf(dojiCandle);
+
+                            // List to store the next 5 candles
+                            List<Candel> nextFiveCandles = new List<Candel>();
+
+                            nextFiveCandles.Add(dojiCandle);
+
+                            // Check if there are at least 5 more candles after the identified Dragonfly Doji candle
+                            for (int i = dojiIndex + 1; i < dojiIndex + 6 && i < CandelData.Count; i++)
+                            {
+                                nextFiveCandles.Add(CandelData[i]);
+                            }
+
+                            // Add the list of next 5 candles to the AnalyzerList
+                            AnalyzerList.Add(nextFiveCandles);
+                        }
+
+                        foreach (List<Candel> detectedCandelList in AnalyzerList)
+                        {
+                            Candel firstCandel = detectedCandelList[0];
+                            Candel lastCandel = detectedCandelList[5];
+
+                            bool isCorrectPrediction = detectedCandelList.Any(c => c.EndPrice > firstCandel.EndPrice);
+
+                            if (isCorrectPrediction)
+                            {
+                                Candel candelThatSatisfiesCondition = detectedCandelList.FirstOrDefault(c => c.EndPrice > firstCandel.EndPrice);
+
+                                CorrectPredictionList.Add(detectedCandelList);
+                                MainCorrectPredictionList.Add(CorrectPredictionList);
+
+                                TotalProfit = TotalProfit + (candelThatSatisfiesCondition.EndPrice - firstCandel.EndPrice);
+                                MainProfit = MainProfit + (candelThatSatisfiesCondition.EndPrice - firstCandel.EndPrice);
+                            }
+                            else
+                            {
+                                WrongPredictionList.Add(detectedCandelList);
+                                MainWrongPredictionList.Add(WrongPredictionList);
+                                NetLoss = NetLoss + (firstCandel.EndPrice - lastCandel.EndPrice);
+                                MainLoss = MainLoss + (firstCandel.EndPrice - lastCandel.EndPrice);
+                            }
+                        }
+
+                    }
+                    else
+                    {
+                        Console.WriteLine($"Error: {response.StatusCode}");
+                    }
+
+
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"An error occurred: {ex.Message}");
+                }
+
+                
+                
+
+
+            }
+
+            return Ok(new
+            {
+                MainProfit,
+                MainLoss,
+                MainCorrectPredictionList,
+                MainWrongPredictionList
+            });
+
+        }
 
         //POST https://localhost:7067/api/Test/TestMasterAPI
         [HttpPost("TestMasterAPI")]
@@ -174,33 +309,24 @@ namespace LogicTester.Controllers
                 // Check if the candle has a small body
                 bool isSmallBody = Math.Abs(recentCandel.StartPrice - recentCandel.EndPrice) < (recentCandel.HighestPrice - recentCandel.LowestPrice) * 0.3m;
 
-                // Check for a long lower wick (lower wick should be significantly longer than the body)
-                bool longLowerWick = (recentCandel.StartPrice - recentCandel.LowestPrice) > 2.5m * Math.Abs(recentCandel.StartPrice - recentCandel.EndPrice);
+                // Check for a long lower wick (lower wick should be longer than twice the body)
+                bool longLowerWick = (recentCandel.StartPrice - recentCandel.LowestPrice) > 2 * Math.Abs(recentCandel.StartPrice - recentCandel.EndPrice);
 
-                // Validate increased volume (optional if you have volume data)
-                bool highVolume = recentCandel.Volume > CandelData.Where(x => x.CloseTime < recentCandel.OpenTime)
-                                                                  .OrderByDescending(x => x.CloseTime)
-                                                                  .Take(3)
-                                                                  .Select(x => x.Volume)
-                                                                  .Average();
+                // Check if it appears after a downtrend (preceding candles should be bearish)
+                bool precedingBearishTrend = CandelData.Where(x => x.CloseTime < recentCandel.OpenTime)
+                                                        .OrderByDescending(x => x.CloseTime)
+                                                        .Take(3)
+                                                        .All(x => x.EndPrice < x.StartPrice); // Last 3 candles should be bearish
 
-                // The next few candles should exhibit confirmation (e.g., at least 2 of the next 3 are bullish)
-                var nextCandles = CandelData.Where(x => x.OpenTime > recentCandel.CloseTime)
-                                            .OrderBy(x => x.OpenTime)
-                                            .Take(3)
-                                            .ToList();
+                //// The next candle should be bullish to confirm upward momentum
+                //bool nextCandleBullish = CandelData.Where(x => x.OpenTime > recentCandel.CloseTime)
+                //                                   .OrderBy(x => x.OpenTime)
+                //                                   .FirstOrDefault()?.EndPrice > recentCandel.EndPrice;
 
-                bool bullishConfirmation = nextCandles.Count >= 1 &&
-                                           nextCandles.Count(x => x.EndPrice > x.StartPrice) >= 1;
-
-                Candel verificationCandel = CandelData.Where(x => x.OpenTime > recentCandel.CloseTime)
-                   .OrderBy(x => x.OpenTime)
-                   .FirstOrDefault();
-
-                // If all conditions are satisfied, the pattern is identified
-                if (isSmallBody && longLowerWick && highVolume && bullishConfirmation)
+                // If all conditions are satisfied, we identify the Hammer candlestick
+                if (isSmallBody && longLowerWick && precedingBearishTrend )
                 {
-                    dragonFlyDojiCandles.Add(verificationCandel);
+                    dragonFlyDojiCandles.Add(recentCandel);
                 }
             }
 
