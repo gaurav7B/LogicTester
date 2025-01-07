@@ -129,13 +129,15 @@ namespace LogicTester.Controllers
                         foreach (List<Candel> detectedCandelList in AnalyzerList)
                         {
                             Candel firstCandel = detectedCandelList[0];
-                            Candel lastCandel = detectedCandelList[5];
+                            Candel lastCandel = detectedCandelList[2];
 
                             bool isCorrectPrediction = detectedCandelList.Any(c => c.EndPrice > firstCandel.EndPrice);
 
-                            if (isCorrectPrediction)
+                            //if (isCorrectPrediction)
+                            if(lastCandel.EndPrice > firstCandel.EndPrice)
                             {
-                                Candel candelThatSatisfiesCondition = detectedCandelList.FirstOrDefault(c => c.EndPrice > firstCandel.EndPrice);
+                                //Candel candelThatSatisfiesCondition = detectedCandelList.FirstOrDefault(c => c.EndPrice > firstCandel.EndPrice);
+                                Candel candelThatSatisfiesCondition = lastCandel;
 
                                 CorrectPredictionList.Add(detectedCandelList);
                                 MainCorrectPredictionList.Add(CorrectPredictionList);
@@ -306,25 +308,40 @@ namespace LogicTester.Controllers
             {
                 Candel recentCandel = c;
 
-                // Check if the candle has a small body
-                bool isSmallBody = Math.Abs(recentCandel.StartPrice - recentCandel.EndPrice) < (recentCandel.HighestPrice - recentCandel.LowestPrice) * 0.3m;
+                // Check if it is a Doji with a small body
+                bool isDoji = Math.Abs(recentCandel.StartPrice - recentCandel.EndPrice) < (recentCandel.HighestPrice - recentCandel.LowestPrice) * 0.1m;
 
-                // Check for a long lower wick (lower wick should be longer than twice the body)
-                bool longLowerWick = (recentCandel.StartPrice - recentCandel.LowestPrice) > 2 * Math.Abs(recentCandel.StartPrice - recentCandel.EndPrice);
+                // Check for a long lower shadow (shadow size relative to the body)
+                bool longLowerShadow = (recentCandel.StartPrice - recentCandel.LowestPrice) > 3 * (recentCandel.EndPrice - recentCandel.StartPrice);
 
-                // Check if it appears after a downtrend (preceding candles should be bearish)
-                bool precedingBearishTrend = CandelData.Where(x => x.CloseTime < recentCandel.OpenTime)
-                                                        .OrderByDescending(x => x.CloseTime)
-                                                        .Take(3)
-                                                        .All(x => x.EndPrice < x.StartPrice); // Last 3 candles should be bearish
+                // The body of the candle should be small and at the top of the range
+                bool smallBodyAtTop = Math.Abs(recentCandel.StartPrice - recentCandel.EndPrice) < (recentCandel.HighestPrice - recentCandel.LowestPrice) * 0.3m;
 
-                //// The next candle should be bullish to confirm upward momentum
+                //// Preceding candle's trend should be bullish (for confirming upward momentum)
+                //bool precedingBullishTrend = CandelData.Where(x => x.CloseTime < recentCandel.OpenTime)
+                //                                       .OrderByDescending(x => x.CloseTime)
+                //                                       .Take(3)
+                //                                       .All(x => x.EndPrice > x.StartPrice); // At least the last 3 candles should be bullish
+
+                //// Check for higher volume
+                //bool higherVolume = recentCandel.Volume > CandelData.Average(x => x.Volume);
+
+                ////bool higherVolume = recentCandel.Volume > CandelData.TakeLast(10).Max(x => x.Volume) * 0.75m; // Volume above 75% of the max in last 10 candles
+
+
+                //// The next candle should also be bullish for confirmation
                 //bool nextCandleBullish = CandelData.Where(x => x.OpenTime > recentCandel.CloseTime)
                 //                                   .OrderBy(x => x.OpenTime)
                 //                                   .FirstOrDefault()?.EndPrice > recentCandel.EndPrice;
 
-                // If all conditions are satisfied, we identify the Hammer candlestick
-                if (isSmallBody && longLowerWick && precedingBearishTrend )
+                //Candel verificationCandel = CandelData.Where(x => x.OpenTime > recentCandel.CloseTime)
+                //                                   .OrderBy(x => x.OpenTime)
+                //                                   .FirstOrDefault();
+
+                // If all conditions match, then it's a Dragonfly Doji with high probability of upward movement
+                if (isDoji && longLowerShadow && smallBodyAtTop 
+                    //&& precedingBullishTrend && higherVolume && nextCandleBullish
+                    )
                 {
                     dragonFlyDojiCandles.Add(recentCandel);
                 }
