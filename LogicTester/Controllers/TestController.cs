@@ -129,15 +129,13 @@ namespace LogicTester.Controllers
                         foreach (List<Candel> detectedCandelList in AnalyzerList)
                         {
                             Candel firstCandel = detectedCandelList[0];
-                            Candel lastCandel = detectedCandelList[2];
+                            Candel lastCandel = detectedCandelList[5];
 
                             bool isCorrectPrediction = detectedCandelList.Any(c => c.EndPrice > firstCandel.EndPrice);
 
-                            //if (isCorrectPrediction)
-                            if(lastCandel.EndPrice > firstCandel.EndPrice)
+                            if (isCorrectPrediction)
                             {
-                                //Candel candelThatSatisfiesCondition = detectedCandelList.FirstOrDefault(c => c.EndPrice > firstCandel.EndPrice);
-                                Candel candelThatSatisfiesCondition = lastCandel;
+                                Candel candelThatSatisfiesCondition = detectedCandelList.FirstOrDefault(c => c.EndPrice > firstCandel.EndPrice);
 
                                 CorrectPredictionList.Add(detectedCandelList);
                                 MainCorrectPredictionList.Add(CorrectPredictionList);
@@ -147,10 +145,31 @@ namespace LogicTester.Controllers
                             }
                             else
                             {
-                                WrongPredictionList.Add(detectedCandelList);
-                                MainWrongPredictionList.Add(WrongPredictionList);
-                                NetLoss = NetLoss + (firstCandel.EndPrice - lastCandel.EndPrice);
-                                MainLoss = MainLoss + (firstCandel.EndPrice - lastCandel.EndPrice);
+                                foreach (var detectedCandel in detectedCandelList)
+                                {
+                                    // Find the candel meeting the criteria
+                                    var matchingCandel = CandelData
+                                        .Where(c => c.EndPrice > detectedCandel.EndPrice && c.OpenTime > detectedCandel.OpenTime)
+                                        .FirstOrDefault();
+
+                                    if (matchingCandel != null)
+                                    {
+                                        CorrectPredictionList.Add(detectedCandelList);
+
+                                        MainCorrectPredictionList.Add(CorrectPredictionList);
+
+                                        TotalProfit = TotalProfit + (matchingCandel.EndPrice - detectedCandel.EndPrice);
+                                        MainProfit = MainProfit + (matchingCandel.EndPrice - detectedCandel.EndPrice);
+                                    }
+                                    else
+                                    {
+                                        WrongPredictionList.Add(detectedCandelList);
+                                        MainWrongPredictionList.Add(WrongPredictionList);
+                                        NetLoss = NetLoss + (firstCandel.EndPrice - detectedCandel.EndPrice);
+                                        MainLoss = MainLoss + (firstCandel.EndPrice - detectedCandel.EndPrice);
+                                    }
+                                }
+
                             }
                         }
 
