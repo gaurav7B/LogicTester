@@ -53,6 +53,8 @@ namespace LogicTester.Controllers
             List<List<List<Candel>>> MainCorrectPredictionList = new List<List<List<Candel>>>();
             List<List<List<Candel>>> MainWrongPredictionList = new List<List<List<Candel>>>();
 
+            List<List<Candel>> MainMasterList = new List<List<Candel>>();
+
 
             decimal MainProfit = 0;
             decimal MainLoss = 0;
@@ -103,6 +105,7 @@ namespace LogicTester.Controllers
                         List<Candel> dragonFlyDojiCandles = IdentifyDragonflyDojiCandles(CandelData);
 
                         MasterList = CandelData;
+                        MainMasterList.Add(MasterList);
                         DrafonFlyDojiCandels = dragonFlyDojiCandles;
 
                         // Iterating through each Dragonfly Doji Candle
@@ -197,7 +200,8 @@ namespace LogicTester.Controllers
                 MainProfit,
                 MainLoss,
                 MainCorrectPredictionList,
-                MainWrongPredictionList
+                MainWrongPredictionList,
+                MainMasterList
             });
 
         }
@@ -336,33 +340,34 @@ namespace LogicTester.Controllers
                 // The body of the candle should be small and at the top of the range
                 bool smallBodyAtTop = Math.Abs(recentCandel.StartPrice - recentCandel.EndPrice) < (recentCandel.HighestPrice - recentCandel.LowestPrice) * 0.3m;
 
-                //// Preceding candle's trend should be bullish (for confirming upward momentum)
-                //bool precedingBullishTrend = CandelData.Where(x => x.CloseTime < recentCandel.OpenTime)
-                //                                       .OrderByDescending(x => x.CloseTime)
-                //                                       .Take(3)
-                //                                       .All(x => x.EndPrice > x.StartPrice); // At least the last 3 candles should be bullish
+                // Preceding candle's trend should be bullish (for confirming upward momentum)
+                bool precedingBullishTrend = CandelData.Where(x => x.CloseTime < recentCandel.OpenTime)
+                                                       .OrderByDescending(x => x.CloseTime)
+                                                       .Take(3)
+                                                       .All(x => x.EndPrice > x.StartPrice); // At least the last 3 candles should be bullish
 
                 //// Check for higher volume
                 //bool higherVolume = recentCandel.Volume > CandelData.Average(x => x.Volume);
 
-                ////bool higherVolume = recentCandel.Volume > CandelData.TakeLast(10).Max(x => x.Volume) * 0.75m; // Volume above 75% of the max in last 10 candles
+                bool higherVolume = recentCandel.Volume > CandelData.TakeLast(10).Max(x => x.Volume) * 0.75m; // Volume above 75% of the max in last 10 candles
 
 
-                //// The next candle should also be bullish for confirmation
-                //bool nextCandleBullish = CandelData.Where(x => x.OpenTime > recentCandel.CloseTime)
-                //                                   .OrderBy(x => x.OpenTime)
-                //                                   .FirstOrDefault()?.EndPrice > recentCandel.EndPrice;
+                // The next candle should also be bullish for confirmation
+                bool nextCandleBullish = CandelData.Where(x => x.OpenTime > recentCandel.CloseTime)
+                                                   .OrderBy(x => x.OpenTime)
+                                                   .FirstOrDefault()?.EndPrice > recentCandel.EndPrice;
 
-                //Candel verificationCandel = CandelData.Where(x => x.OpenTime > recentCandel.CloseTime)
-                //                                   .OrderBy(x => x.OpenTime)
-                //                                   .FirstOrDefault();
+                Candel verificationCandel = CandelData.Where(x => x.OpenTime > recentCandel.CloseTime)
+                                                   .OrderBy(x => x.OpenTime)
+                                                   .FirstOrDefault();
 
                 // If all conditions match, then it's a Dragonfly Doji with high probability of upward movement
-                if (isDoji && longLowerShadow && smallBodyAtTop 
-                    //&& precedingBullishTrend && higherVolume && nextCandleBullish
+                if (isDoji && longLowerShadow && smallBodyAtTop
+                    && precedingBullishTrend && higherVolume
+                    && nextCandleBullish
                     )
                 {
-                    dragonFlyDojiCandles.Add(recentCandel);
+                    dragonFlyDojiCandles.Add(verificationCandel);
                 }
             }
 
